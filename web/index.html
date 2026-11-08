@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetLimir - ادغام اینترنت و تونل سیستم</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo-box">
+          <span class="logo-icon">⚡</span>
+          <div>
+            <h1 class="logo-title">NetLimir</h1>
+            <span class="logo-subtitle">ادغام اینترنت (LAN + Wi-Fi) و تونل کل سیستم</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="btn-lang" class="btn btn-secondary btn-xs" onclick="toggleLanguage()">English</button>
+        <div id="admin-badge" class="badge badge-warning">
+          <span class="badge-dot"></span>
+          <span id="admin-text">بررسی دسترسی ادمین...</span>
+          <button id="btn-restart-admin" class="btn btn-xs btn-admin" style="display:none;" onclick="restartAdmin()">ارتقا به ادمین</button>
+        </div>
+        <div id="status-pill" class="status-pill status-active">
+          <span class="pulsing-dot"></span>
+          <span id="status-text">سیستم آماده</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Master Switch Cards -->
+    <section class="master-switches-grid">
+      <!-- Combiner Switch -->
+      <div class="card switch-card">
+        <div class="switch-card-header">
+          <div class="icon-bubble icon-blue">🌐</div>
+          <div>
+            <h3>موتور ادغام‌کننده اینترنت</h3>
+            <p>توزیع اتصالات دانلود بین وای‌فای و مودم لن (SOCKS5)</p>
+          </div>
+        </div>
+        <div class="switch-card-action">
+          <div class="port-info">پورت: <code>127.0.0.1:1080</code></div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-proxy" checked onchange="toggleProxy()">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- TUN Switch -->
+      <div class="card switch-card card-tun">
+        <div class="switch-card-header">
+          <div class="icon-bubble icon-purple">🚀</div>
+          <div>
+            <div class="title-with-badge">
+              <h3>حالت کل سیستم (TUN Mode)</h3>
+              <span class="mini-badge">کل ویندوز</span>
+            </div>
+            <p>هدایت تمام ترافیک ویندوز (مرورگرها، استیم، گیم‌ها و...) به اینترنت ادغام شده</p>
+          </div>
+        </div>
+        <div class="switch-card-action">
+          <div id="tun-note" class="tun-note">نیاز به اجرای برنامه به عنوان Administrator</div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-tun" onchange="toggleTun()">
+            <span class="slider slider-purple"></span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live Total Speed & Bandwidth Section -->
+    <section class="card speed-overview-card">
+      <div class="speed-grid">
+        <div class="speed-metric">
+          <span class="metric-label">سرعت دانلود مجموع (همزمان)</span>
+          <div class="metric-val-wrap">
+            <span id="total-speed-down" class="metric-val">0.0</span>
+            <span id="total-speed-unit" class="metric-unit">MB/s</span>
+          </div>
+          <div class="speed-submetrics">
+            <span>آپلود مجموع: <strong id="total-speed-up">0 KB/s</strong></span>
+            <span>•</span>
+            <span>اتصالات فعال: <strong id="active-conns">0</strong></span>
+          </div>
+        </div>
+
+        <div class="chart-container">
+          <canvas id="speed-canvas" width="450" height="90"></canvas>
+        </div>
+
+        <div class="metric-totals">
+          <div class="sub-metric-box">
+            <span class="sm-label">کل حجم دانلود شده</span>
+            <span id="total-bytes-down" class="sm-val">0 MB</span>
+          </div>
+          <div class="sub-metric-box">
+            <span class="sm-label">تعداد کل درخواست‌ها</span>
+            <span id="total-conns-count" class="sm-val">0</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Adapters & Mode Config Grid -->
+    <section class="section-grid">
+      <!-- Left: Adapters List -->
+      <div class="adapters-column">
+        <div class="section-header">
+          <h2>کارت‌های شبکه فعال (Physical Interfaces)</h2>
+          <button id="btn-speedtest" class="btn btn-secondary btn-sm" onclick="runSpeedtest()">
+            <span class="btn-icon">⚡</span>
+            <span>تست خودکار سرعت</span>
+          </button>
+        </div>
+        <div id="adapters-list" class="adapters-list">
+          <!-- Dynamically populated adapter cards -->
+          <div class="empty-state">در حال شناسایی کارت‌های شبکه...</div>
+        </div>
+      </div>
+
+      <!-- Right: Balancing Mode -->
+      <div class="mode-column">
+        <div class="card config-card">
+          <h2>نحوه تقسیم ترافیک (Load Balancing)</h2>
+          <p class="config-desc">مشخص کنید ترافیک دانلود چگونه بین مودم لن و وای‌فای تقسیم شود:</p>
+          
+          <div class="mode-options">
+            <label class="mode-option">
+              <input type="radio" name="bal-mode" value="auto" checked onchange="changeMode('auto')">
+              <div class="mode-content">
+                <div class="mode-title">⚡ هوشمند خودکار (پیشنهادی)</div>
+                <div class="mode-sub">بر اساس تست سرعت، به خط سریع‌تر سهم بیشتری اختصاص می‌دهد.</div>
+              </div>
+            </label>
+
+            <label class="mode-option">
+              <input type="radio" name="bal-mode" value="equal" onchange="changeMode('equal')">
+              <div class="mode-content">
+                <div class="mode-title">⚖️ تقسیم مساوی ۵۰/۵۰</div>
+                <div class="mode-sub">تعداد اتصالات را دقیقاً به طور مساوی بین دو خط تقسیم می‌کند.</div>
+              </div>
+            </label>
+
+            <label class="mode-option">
+              <input type="radio" name="bal-mode" value="manual" onchange="changeMode('manual')">
+              <div class="mode-content">
+                <div class="mode-title">🎛️ دستی بر اساس وزن</div>
+                <div class="mode-sub">تعیین سهم هر کارت به صورت دلخواه با اسلایدرهای اختصاصی.</div>
+              </div>
+            </label>
+          </div>
+
+          <!-- Manual Weight Controls (Shown when manual mode is selected) -->
+          <div id="manual-controls" class="manual-controls" style="display: none;">
+            <h4>تنظیم سهم ترافیک خطوط:</h4>
+            <div id="weight-sliders"></div>
+            <button class="btn btn-primary btn-sm btn-block" onclick="saveManualWeights()">ثبت ضرایب</button>
+          </div>
+        </div>
+
+        <!-- IDM Quick Info Card -->
+        <div class="card idm-info-card">
+          <div class="idm-header" onclick="toggleIdmHelp()">
+            <div class="idm-title">
+              <span class="idm-icon">📥</span>
+              <span>راهنمای استفاده در IDM (بدون TUN)</span>
+            </div>
+            <span id="idm-toggle-arrow">▼</span>
+          </div>
+          <div id="idm-body" class="idm-body" style="display: none;">
+            <p>اگر حالت <strong>TUN Mode</strong> را روشن کنید، IDM به صورت خودکار از هر دو خط استفاده می‌کند و نیازی به تنظیمات ندارد.</p>
+            <p>در غیر این صورت، تنظیمات در IDM به صورت دستی:</p>
+            <ol>
+              <li>منوی <strong>Downloads -> Options -> Proxy / Socks</strong> را باز کنید.</li>
+              <li>تیک <strong>Use SOCKS</strong> را فعال و <strong>SOCKS v5</strong> را انتخاب کنید.</li>
+              <li>آدرس سرور: <code>127.0.0.1</code> و پورت: <code>1080</code></li>
+              <li>در تب <strong>Connection</strong> تعداد کانکشن‌ها را روی <strong>16 یا 32</strong> قرار دهید.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live Connections Log -->
+    <section class="card log-card">
+      <div class="log-card-header">
+        <h3>جریان زنده اتصالات (Live Connection Traffic)</h3>
+        <span class="log-desc">نمایش زنده‌ی اینکه هر درخواست از کدام کارت شبکه عبور می‌کند</span>
+      </div>
+      <div class="log-table-wrapper">
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th style="width: 80px;">زمان</th>
+              <th style="width: 140px;">کارت شبکه</th>
+              <th>مقصد (Host / IP)</th>
+              <th style="width: 70px;">پورت</th>
+              <th style="width: 90px;">وضعیت</th>
+            </tr>
+          </thead>
+          <tbody id="logs-tbody">
+            <tr>
+              <td colspan="5" class="empty-state">هنوز ترافیکی ثبت نشده است...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
