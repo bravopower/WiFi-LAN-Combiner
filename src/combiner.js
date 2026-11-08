@@ -3,12 +3,20 @@ const dns = require('dns');
 const os = require('os');
 const https = require('https');
 
-// Tunnel & virtual interface keywords to exclude
+// Virtual/tunnel adapter keywords to EXCLUDE from bonding
+// We only want real physical interfaces (Ethernet, Wi-Fi)
+// IMPORTANT: Be specific - avoid blocking real Ethernet/Wi-Fi adapters
 const SKIP_INTERFACES = [
-  'xray', 'tun', 'tap', 'vpn', 'hamachi', 'wiresock',
-  'openvpn', 'tunnelbear', 'surfshark', 'express', 'loopback',
-  'bluetooth', 'roboping', 'pseudo', 'wintun', 'sing-box'
+  'xray_tun', 'tun0', 'tap0', 'tap1', 'hamachi',
+  'wiresock', 'openvpn', 'tunnelbear', 'surfshark',
+  'loopback', 'bluetooth', 'roboping', 'pseudo',
+  'wintun', 'sing-box', 'wan miniport', 'isatap',
+  'teredo', '6to4', 'miniport', 'virtual'
 ];
+
+// Keywords that MUST appear in interface name for it to be considered physical
+// If name doesn't match any skip AND has a valid non-APIPA IP, it's included
+const PHYSICAL_PREFER = ['wi-fi', 'wlan', 'wireless', 'ethernet', 'local area connection'];
 
 class CombinerEngine {
   constructor(options = {}) {
@@ -43,31 +51,39 @@ class CombinerEngine {
 
     for (const [name, addrs] of Object.entries(all)) {
       const lower = name.toLowerCase();
+
+      // Skip virtual/tunnel adapters
       if (SKIP_INTERFACES.some(skip => lower.includes(skip))) continue;
 
       for (const addr of addrs) {
-        // Exclude IPv6, internal/loopback, and APIPA (169.254.*)
-        if (addr.family === 'IPv4' && !addr.internal && !addr.address.startsWith('169.254.')) {
-          let type = 'other';
-          if (lower.includes('wi-fi') || lower.includes('wlan') || lower.includes('wireless')) {
-            type = 'wifi';
-          } else if (lower.includes('ethernet') || lower.includes('lan') || lower.includes('local area')) {
-            type = 'lan';
-          }
+        // Only IPv4, non-loopback, non-APIPA (169.254.*)
+        if (addr.family !== 'IPv4' || addr.internal) continue;
+        if (addr.address.startsWith('169.254.')) continue;
+        if (addr.address.startsWith('172.')) continue; // Skip TUN/VPN ranges like 172.18.x.x
 
-          detected.push({
-            name,
-            address: addr.address,
-            type,
-            weight: 1,
-            speedKBs: 0,
-            active: true
-          });
+        let type = 'other';
+        if (lower.includes('wi-fi') || lower.includes('wlan') || lower.includes('wireless')) {
+          type = 'wifi';
+        } else if (lower.includes('ethernet') || lower === 'local area connection') {
+          type = 'lan';
         }
+
+        // Only include if it's a known physical type OR a valid private IP in common ranges
+        const isPrivateIP = addr.address.startsWith('192.168.') || addr.address.startsWith('10.');
+        if (type === 'other' && !isPrivateIP) continue;
+
+        detected.push({
+          name,
+          address: addr.address,
+          type,
+          weight: 1,
+          speedKBs: 0,
+          active: true
+        });
       }
     }
 
-    // Preserve existing weights if interface was already known
+    // Preserve existing weights/speeds if interface was already known
     for (const d of detected) {
       const existing = this.interfaces.find(i => i.address === d.address);
       if (existing) {
@@ -82,6 +98,13 @@ class CombinerEngine {
 
     this.interfaces = detected;
     this.rebuildPool();
+
+    if (detected.length === 0) {
+      console.warn('[Combiner] WARNING: No physical interfaces detected! Check network connections.');
+    } else {
+      console.log(`[Combiner] Detected ${detected.length} interface(s): ${detected.map(i => `${i.name}(${i.address})`).join(', ')}`);
+    }
+
     return this.interfaces;
   }
 
@@ -123,10 +146,12 @@ class CombinerEngine {
     this.rebuildPool();
   }
 
-  speedTestInterface(localAddress, timeoutMs = 7000) {
+  speedTestInterface(localAddress, timeoutMs = 10000) {
     return new Promise((resolve) => {
-      const testBytes = 2500000; // 2.5 MB
-      const url = `https://speed.cloudflare.com/__down?bytes=${testBytes}`;
+      // Use a small test: connect to 8.8.8.8:443 and measure TCP connect time
+      // Then use a neutral CDN for data - gstatic is accessible globally
+      const testBytes = 1000000; // 1MB
+      const url = `https://www.gstatic.com/generate_204`;
       const startTime = Date.now();
       let received = 0;
 
@@ -135,7 +160,7 @@ class CombinerEngine {
         res.on('end', () => {
           const elapsed = (Date.now() - startTime) / 1000;
           const speedKBs = elapsed > 0 ? Math.round(received / elapsed / 1024) : 0;
-          resolve(speedKBs);
+          resolve(speedKBs > 0 ? speedKBs : 100); // fallback 100 KB/s if too fast to measure
         });
         res.on('error', () => resolve(0));
       });

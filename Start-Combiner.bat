@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-title WiFi-LAN Combiner - Internet Bonding ^& TUN Mode
+title WiFi-LAN Combiner - Internet Bonding
 
 :: Fix working directory to script location
 cd /d "%~dp0"
@@ -9,70 +9,59 @@ cd /d "%~dp0"
 net session >nul 2>&1
 if %errorLevel% equ 0 goto :RUN_AS_ADMIN
 
-:: ─── Not Admin: offer to elevate ────────────────────────────
+:: ─── Not Admin: elevate via VBScript ─────────────────────────
 echo.
 echo ========================================================
-echo   WiFi-LAN Combiner - Requesting Administrator Privileges...
-echo   (Required for System-Wide TUN Mode)
+echo   WiFi-LAN Combiner - Requesting Administrator Privileges
+echo   (Required for WeakHost routing and System Proxy)
 echo ========================================================
 echo.
 
-:: Create a temporary VBS script for elevation (most reliable method)
 set "ELEVATE_VBS=%TEMP%\combiner_elevate.vbs"
-echo Set UAC = CreateObject^("Shell.Application"^) > "%ELEVATE_VBS%"
-echo UAC.ShellExecute "%~f0", "ELEVATED", "%~dp0", "runas", 1 >> "%ELEVATE_VBS%"
+echo Set UAC = CreateObject("Shell.Application") > "%ELEVATE_VBS%"
+echo UAC.ShellExecute "%~f0", "", "%~dp0", "runas", 1 >> "%ELEVATE_VBS%"
 cscript //nologo "%ELEVATE_VBS%"
 del /f /q "%ELEVATE_VBS%" >nul 2>&1
 exit /b
 
 :RUN_AS_ADMIN
-:: ─── We are now running as Admin ─────────────────────────────
-:: Make sure working directory is correct (UAC can change it)
+:: ─── Running as Admin ─────────────────────────────────────────
 cd /d "%~dp0"
 
 echo.
 echo ========================================================
-echo   WiFi-LAN Combiner (LAN + Wi-Fi) ^& TUN App
-echo   Running as Administrator - TUN Mode Available!
+echo   WiFi-LAN Combiner (LAN + Wi-Fi) Bonding
+echo   Running as Administrator!
 echo ========================================================
 echo.
 
-:: Optimize network interfaces for multi-homing / bonding (WeakHost)
-powershell -NoProfile -Command "Get-NetIPInterface -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -match 'Ethernet$|Wi-Fi' -and $_.ConnectionState -eq 'Connected' } | ForEach-Object { Set-NetIPInterface -InterfaceIndex $_.InterfaceIndex -WeakHostSend Enabled -WeakHostReceive Enabled -ErrorAction SilentlyContinue }" >nul 2>&1
+:: Enable WeakHostSend/Receive for Ethernet and Wi-Fi
+:: This is CRITICAL for localAddress binding to work correctly
+echo [1/4] Enabling WeakHost routing for physical adapters...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\enable-weakhost-admin.ps1" >nul 2>&1
+echo       Done.
 
-:: Kill any existing processes to avoid port conflicts
+:: Kill any leftover processes
+echo [2/4] Clearing previous instances...
 taskkill /f /im sing-box.exe >nul 2>&1
 
-:: Check if port 1080 or 8888 are in use
-netstat -ano | findstr ":1080 " | findstr "LISTENING" >nul 2>&1
-if %errorLevel% equ 0 (
-    echo [WARNING] Port 1080 is already in use. Attempting to free it...
-    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":1080 " ^| findstr "LISTENING"') do (
-        taskkill /pid %%a /f >nul 2>&1
-    )
-    timeout /t 1 /nobreak >nul
+:: Free ports if occupied
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":1080 " ^| findstr "LISTENING"') do (
+    taskkill /pid %%a /f >nul 2>&1
 )
-
-netstat -ano | findstr ":8888 " | findstr "LISTENING" >nul 2>&1
-if %errorLevel% equ 0 (
-    echo [WARNING] Port 8888 is already in use. Attempting to free it...
-    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8888 " ^| findstr "LISTENING"') do (
-        taskkill /pid %%a /f >nul 2>&1
-    )
-    timeout /t 1 /nobreak >nul
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8888 " ^| findstr "LISTENING"') do (
+    taskkill /pid %%a /f >nul 2>&1
 )
+echo       Done.
 
-echo Starting backend server...
-echo.
-
-:: Start node server in a minimized window
+:: Start node server
+echo [3/4] Starting backend server...
 start "WiFi-LAN-Combiner-Server" /min cmd /c "cd /d "%~dp0" && node src\server.js"
 
-:: Wait for the server to start
-echo Waiting for server to start...
+:: Wait for server to boot
 timeout /t 3 /nobreak >nul
 
-:: Verify server is running
+:: Verify
 netstat -ano | findstr ":8888 " | findstr "LISTENING" >nul 2>&1
 if %errorLevel% neq 0 (
     echo.
@@ -82,19 +71,19 @@ if %errorLevel% neq 0 (
     pause
     exit /b 1
 )
+echo       Server started on port 8888.
 
-echo [OK] Server is running on port 8888!
-echo.
-
-:: Launch Dashboard in browser
+:: Open dashboard
+echo [4/4] Opening dashboard...
 start http://127.0.0.1:8888
 
 echo.
 echo ========================================================
-echo   WiFi-LAN Combiner is running!
+echo   WiFi-LAN Combiner is RUNNING!
 echo   Dashboard: http://127.0.0.1:8888
+echo   SOCKS5 Proxy: 127.0.0.1:1080
 echo.
-echo   Press any key to STOP WiFi-LAN Combiner and exit...
+echo   Press any key to STOP WiFi-LAN Combiner...
 echo ========================================================
 echo.
 pause >nul
@@ -103,24 +92,21 @@ pause >nul
 echo.
 echo Shutting down WiFi-LAN Combiner...
 
-:: Kill the node server
-tasklist /fi "WINDOWTITLE eq WiFi-LAN-Combiner-Server" /fo csv 2>nul | findstr /i "cmd" >nul
-if %errorLevel% equ 0 (
-    taskkill /fi "WINDOWTITLE eq WiFi-LAN-Combiner-Server" /f >nul 2>&1
-)
+:: Kill the server window
+taskkill /fi "WINDOWTITLE eq WiFi-LAN-Combiner-Server" /f >nul 2>&1
 
-:: Kill node processes on our ports
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":1080 " ^| findstr "LISTENING" 2^>nul') do (
+:: Kill any node on our ports
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":1080 " ^| findstr "LISTENING"') do (
     taskkill /pid %%a /f >nul 2>&1
 )
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8888 " ^| findstr "LISTENING" 2^>nul') do (
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8888 " ^| findstr "LISTENING"') do (
     taskkill /pid %%a /f >nul 2>&1
 )
 
-:: Kill sing-box if running
+:: Kill sing-box
 taskkill /f /im sing-box.exe >nul 2>&1
 
-:: Reset Windows System Proxy
+:: Disable System Proxy (so VPNs work after closing)
 reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable /t REG_DWORD /d 0 /f >nul 2>&1
 
 echo WiFi-LAN Combiner stopped. Goodbye!

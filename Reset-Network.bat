@@ -29,3 +29,4 @@ echo.
 echo [SUCCESS] Network cleaned up! All VPNs and adapters are now unlocked and normal.
 echo.
 timeout /t 3 >nul
+

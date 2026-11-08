@@ -192,10 +192,9 @@ async function main() {
     console.log(`[Dashboard] Web App available at http://${HOST}:${PORT}`);
   });
 
-  // Run initial speed calibration in background
-  setTimeout(() => {
-    combiner.runSpeedCalibration();
-  }, 1000);
+  // NOTE: Speed calibration is NOT run at startup automatically.
+  // It uses cloudflare speed.cloudflare.com which may be blocked in some regions.
+  // The user can trigger it manually from the dashboard via the speedtest button.
 }
 
 main().catch(err => {
