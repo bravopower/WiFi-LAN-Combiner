@@ -25,7 +25,7 @@ class TunManager {
   generateConfig(socksPort = 1080) {
     const config = {
       log: {
-        level: 'info'
+        level: 'warn'
       },
       dns: {
         servers: [
@@ -62,10 +62,6 @@ class TunManager {
       route: {
         auto_detect_interface: true,
         rules: [
-          {
-            process_name: ['node.exe', 'cmd.exe', 'powershell.exe'],
-            outbound: 'direct-out'
-          },
           {
             protocol: 'dns',
             action: 'hijack-dns'

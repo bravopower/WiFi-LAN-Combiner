@@ -32,25 +32,9 @@ class CombinerEngine {
     this.logs = [];
     this.logId = 0;
     
-    // Timer for speed calculation and health checks
+    // Timer for speed calculation
     this.speedInterval = null;
-    this.healthInterval = null;
     this.isTestingSpeed = false;
-  }
-
-  pingInterface(localAddress) {
-    return new Promise((resolve) => {
-      const startTime = Date.now();
-      const req = https.get('https://1.1.1.1/cdn-cgi/trace', {
-        localAddress,
-        timeout: 4500
-      }, (res) => {
-        res.resume();
-        res.on('end', () => resolve(Date.now() - startTime));
-      });
-      req.on('error', () => resolve(-1));
-      req.on('timeout', () => { req.destroy(); resolve(-1); });
-    });
   }
 
   detectInterfaces() {
@@ -77,7 +61,6 @@ class CombinerEngine {
             type,
             weight: 1,
             speedKBs: 0,
-            pingMs: 0,
             active: true
           });
         }
@@ -105,7 +88,6 @@ class CombinerEngine {
   rebuildPool() {
     const pool = [];
     for (const iface of this.interfaces) {
-      if (!iface.active) continue;
       const w = Math.max(1, iface.weight || 1);
       for (let i = 0; i < w; i++) {
         pool.push(iface);
@@ -210,28 +192,6 @@ class CombinerEngine {
     if (this.logs.length > 150) this.logs.shift();
   }
 
-  startHealthChecks() {
-    if (this.healthInterval) clearInterval(this.healthInterval);
-    const checkAll = async () => {
-      for (const iface of this.interfaces) {
-        const ping = await this.pingInterface(iface.address);
-        if (ping !== -1) {
-          iface.pingMs = ping;
-          iface.active = true;
-          iface.failCount = 0;
-        } else {
-          iface.failCount = (iface.failCount || 0) + 1;
-          if (iface.failCount >= 3) {
-            iface.active = false;
-          }
-        }
-      }
-      this.rebuildPool();
-    };
-    checkAll();
-    this.healthInterval = setInterval(checkAll, 10000);
-  }
-
   start() {
     if (this.isRunning) return true;
 
@@ -247,7 +207,6 @@ class CombinerEngine {
         this.isRunning = true;
         this.serverStartTime = Date.now();
         this.startSpeedTicker();
-        this.startHealthChecks();
         resolve(true);
       });
       this.server.once('error', reject);
@@ -260,10 +219,6 @@ class CombinerEngine {
     if (this.speedInterval) {
       clearInterval(this.speedInterval);
       this.speedInterval = null;
-    }
-    if (this.healthInterval) {
-      clearInterval(this.healthInterval);
-      this.healthInterval = null;
     }
 
     return new Promise((resolve) => {
@@ -458,7 +413,6 @@ class CombinerEngine {
         type: i.type,
         weight: i.weight,
         speedKBs: i.speedKBs,
-        pingMs: i.pingMs || 0,
         bytesDown: s.bytesDown,
         bytesUp: s.bytesUp,
         conns: s.conns,
@@ -488,4 +442,3 @@ class CombinerEngine {
 }
 
 module.exports = CombinerEngine;
-
