@@ -1,4 +1,4 @@
-# ⚡ NetLimir — Internet Combiner & System-Wide TUN
+# ⚡ WiFi-LAN Combiner — Internet Bonding & System-Wide TUN
 
 <p align="center">
   <strong>Bond multiple internet connections (LAN + Wi-Fi) with real-time load balancing and whole-system TUN routing.</strong>
@@ -23,9 +23,9 @@
 ## 🇬🇧 English Guide
 
 ### Overview
-**NetLimir** is an open-source network bonding and bandwidth aggregation tool for Windows. It combines multiple internet connections (e.g., ADSL/VDSL/Fiber Ethernet + 4G/5G Wi-Fi hotspot) into a unified high-speed pipeline.
+**WiFi-LAN Combiner** is an open-source network bonding and bandwidth aggregation tool for Windows. It combines multiple internet connections (e.g., ADSL/VDSL/Fiber Ethernet + 4G/5G Wi-Fi hotspot) into a unified high-speed pipeline.
 
-Unlike basic proxy wrappers, NetLimir features **System-Wide TUN Mode** that intercepts and bonds traffic for **all** applications on your PC without needing manual proxy configuration.
+Unlike basic proxy wrappers, WiFi-LAN Combiner features **System-Wide TUN Mode** that intercepts and bonds traffic for **all** applications on your PC without needing manual proxy configuration.
 
 ### ✨ Key Features
 - **True Bandwidth Aggregation:** Uses weighted round-robin distribution across physical network interfaces.
@@ -47,10 +47,10 @@ Unlike basic proxy wrappers, NetLimir features **System-Wide TUN Mode** that int
 #### 2. Running NetLimir
 1. Clone or download this repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/netlimir.git
-   cd netlimir
+   git clone https://github.com/YOUR_USERNAME/wifi-lan-combiner.git
+   cd wifi-lan-combiner
    ```
-2. Run **`Start-NetLimir.bat`** (or double-click the desktop shortcut created by `Create-Desktop-Shortcut.bat`).
+2. Run **`Start-Combiner.bat`** (or double-click the desktop shortcut created by `Create-Desktop-Shortcut.bat`).
 3. Click **Yes** on the Windows UAC prompt (Administrator privileges are required to create the TUN interface).
 4. The dashboard will automatically open at **`http://127.0.0.1:8888`**.
 
@@ -65,7 +65,7 @@ Unlike basic proxy wrappers, NetLimir features **System-Wide TUN Mode** that int
 ## 🇮🇷 راهنمای فارسی
 
 ### معرفی نرم‌افزار
-**نت‌لیمیر (NetLimir)** ابزاری برای ادغام و تجمیع همزمان پهنای باند دو یا چند اتصال اینترنت (مانند کابل شبکه مودم خانگی + وای‌فای گوشی/مودم همراه) در ویندوز است.
+**WiFi-LAN Combiner** ابزاری برای ادغام و تجمیع همزمان پهنای باند دو یا چند اتصال اینترنت (مانند کابل شبکه مودم خانگی + وای‌فای گوشی/مودم همراه) در ویندوز است.
 
 این نرم‌افزار مجهز به قابلیت **TUN Mode (تونل کل سیستم)** است که بدون نیاز به تنظیم پروکسی در هیچ برنامه‌ای، تمامی ترافیک ویندوز را به صورت خودکار از هر دو خط عبور می‌دهد.
 
@@ -87,7 +87,7 @@ Unlike basic proxy wrappers, NetLimir features **System-Wide TUN Mode** that int
 - اتصال همزمان به دو اینترنت (مثلاً کابل LAN به مودم ADSL/فیبر + وای‌فای به هات‌اسپات گوشی).
 
 #### ۲. اجرا
-1. فایل **`Start-NetLimir.bat`** را اجرا کنید (یا از طریق شرت‌کات ساخته شده با `Create-Desktop-Shortcut.bat`).
+1. فایل **`Start-Combiner.bat`** را اجرا کنید (یا از طریق شرت‌کات ساخته شده با `Create-Desktop-Shortcut.bat`).
 2. پیغام دسترسی Administrator (UAC ویندوز) را با زدن **Yes** تایید کنید (این دسترسی برای ساخت کارت شبکه مجازی TUN ضروری است).
 3. داشبورد برنامه به صورت خودکار در آدرس **`http://127.0.0.1:8888`** باز می‌شود.
 
@@ -100,8 +100,8 @@ Unlike basic proxy wrappers, NetLimir features **System-Wide TUN Mode** that int
 ## 📁 Project Structure / ساختار پروژه
 
 ```
-netlimir/
-├── Start-NetLimir.bat          # Main launcher (checks admin and opens UI)
+wifi-lan-combiner/
+├── Start-Combiner.bat          # Main launcher (checks admin and opens UI)
 ├── Create-Desktop-Shortcut.bat # One-click desktop shortcut creator
 ├── LICENSE                     # MIT Open Source License
 ├── README.md                   # Bilingual Documentation (English & Persian)

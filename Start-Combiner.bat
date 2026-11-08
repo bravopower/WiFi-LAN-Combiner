@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-title NetLimir - Internet Combiner ^& TUN Mode
+title WiFi-LAN Combiner - Internet Bonding ^& TUN Mode
 
 :: Fix working directory to script location
 cd /d "%~dp0"
@@ -12,13 +12,13 @@ if %errorLevel% equ 0 goto :RUN_AS_ADMIN
 :: ─── Not Admin: offer to elevate ────────────────────────────
 echo.
 echo ========================================================
-echo   NetLimir - Requesting Administrator Privileges...
+echo   WiFi-LAN Combiner - Requesting Administrator Privileges...
 echo   (Required for System-Wide TUN Mode)
 echo ========================================================
 echo.
 
 :: Create a temporary VBS script for elevation (most reliable method)
-set "ELEVATE_VBS=%TEMP%\netlimir_elevate.vbs"
+set "ELEVATE_VBS=%TEMP%\combiner_elevate.vbs"
 echo Set UAC = CreateObject^("Shell.Application"^) > "%ELEVATE_VBS%"
 echo UAC.ShellExecute "%~f0", "ELEVATED", "%~dp0", "runas", 1 >> "%ELEVATE_VBS%"
 cscript //nologo "%ELEVATE_VBS%"
@@ -32,12 +32,12 @@ cd /d "%~dp0"
 
 echo.
 echo ========================================================
-echo   NetLimir - Internet Combiner (LAN + Wi-Fi) ^& TUN App
+echo   WiFi-LAN Combiner (LAN + Wi-Fi) ^& TUN App
 echo   Running as Administrator - TUN Mode Available!
 echo ========================================================
 echo.
 
-:: Kill any existing NetLimir processes to avoid port conflicts
+:: Kill any existing processes to avoid port conflicts
 taskkill /f /im sing-box.exe >nul 2>&1
 
 :: Check if port 1080 or 8888 are in use
@@ -63,7 +63,7 @@ echo Starting backend server...
 echo.
 
 :: Start node server in a minimized window
-start "NetLimir-Server" /min cmd /c "cd /d "%~dp0" && node src\server.js"
+start "WiFi-LAN-Combiner-Server" /min cmd /c "cd /d "%~dp0" && node src\server.js"
 
 :: Wait for the server to start
 echo Waiting for server to start...
@@ -88,22 +88,22 @@ start http://127.0.0.1:8888
 
 echo.
 echo ========================================================
-echo   NetLimir is running!
+echo   WiFi-LAN Combiner is running!
 echo   Dashboard: http://127.0.0.1:8888
 echo.
-echo   Press any key to STOP NetLimir and exit...
+echo   Press any key to STOP WiFi-LAN Combiner and exit...
 echo ========================================================
 echo.
 pause >nul
 
 :: ─── Cleanup on exit ─────────────────────────────────────────
 echo.
-echo Shutting down NetLimir...
+echo Shutting down WiFi-LAN Combiner...
 
 :: Kill the node server
-tasklist /fi "WINDOWTITLE eq NetLimir-Server" /fo csv 2>nul | findstr /i "cmd" >nul
+tasklist /fi "WINDOWTITLE eq WiFi-LAN-Combiner-Server" /fo csv 2>nul | findstr /i "cmd" >nul
 if %errorLevel% equ 0 (
-    taskkill /fi "WINDOWTITLE eq NetLimir-Server" /f >nul 2>&1
+    taskkill /fi "WINDOWTITLE eq WiFi-LAN-Combiner-Server" /f >nul 2>&1
 )
 
 :: Kill node processes on our ports
@@ -117,6 +117,6 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8888 " ^| findstr "LISTENIN
 :: Kill sing-box if running
 taskkill /f /im sing-box.exe >nul 2>&1
 
-echo NetLimir stopped. Goodbye!
+echo WiFi-LAN Combiner stopped. Goodbye!
 timeout /t 2 /nobreak >nul
 exit /b 0

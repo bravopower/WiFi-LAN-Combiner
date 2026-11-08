@@ -137,7 +137,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, message: 'Restarting as Administrator...' }));
 
-    const batchPath = path.resolve(__dirname, '..', 'Start-NetLimir.bat');
+    const batchPath = path.resolve(__dirname, '..', 'Start-Combiner.bat');
     const psCmd = `Start-Process -FilePath "${batchPath}" -Verb RunAs`;
     spawn('powershell', ['-WindowStyle', 'Hidden', '-Command', psCmd], {
       detached: true,
@@ -167,7 +167,7 @@ const server = http.createServer(async (req, res) => {
 
 // Cleanup upon exit
 function cleanup() {
-  console.log('\n[NetLimir] Shutting down cleanly...');
+  console.log('\n[WiFi-LAN Combiner] Shutting down cleanly...');
   tun.stop();
   combiner.stop();
   process.exit(0);
@@ -181,7 +181,7 @@ process.on('exit', () => {
 
 async function main() {
   console.log('========================================================');
-  console.log('   NetLimir - Internet Combiner & System-Wide TUN       ');
+  console.log('   WiFi-LAN Combiner - Internet Bonding & TUN Mode      ');
   console.log('========================================================');
 
   // Start Combiner Proxy by default
