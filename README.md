@@ -47,8 +47,8 @@ Unlike basic proxy wrappers, WiFi-LAN Combiner features **System-Wide TUN Mode**
 #### 2. Running NetLimir
 1. Clone or download this repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/wifi-lan-combiner.git
-   cd wifi-lan-combiner
+   git clone https://github.com/bravopower/WiFi-LAN-Combiner.git
+   cd WiFi-LAN-Combiner
    ```
 2. Run **`Start-Combiner.bat`** (or double-click the desktop shortcut created by `Create-Desktop-Shortcut.bat`).
 3. Click **Yes** on the Windows UAC prompt (Administrator privileges are required to create the TUN interface).
