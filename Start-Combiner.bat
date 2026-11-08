@@ -120,6 +120,9 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8888 " ^| findstr "LISTENIN
 :: Kill sing-box if running
 taskkill /f /im sing-box.exe >nul 2>&1
 
+:: Reset Windows System Proxy
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable /t REG_DWORD /d 0 /f >nul 2>&1
+
 echo WiFi-LAN Combiner stopped. Goodbye!
 timeout /t 2 /nobreak >nul
 exit /b 0

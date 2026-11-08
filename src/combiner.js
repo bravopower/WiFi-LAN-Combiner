@@ -16,13 +16,13 @@ class CombinerEngine {
     this.host = options.host || '127.0.0.1';
     this.server = null;
     this.isRunning = false;
-    
+
     // Distribution mode: 'auto', 'equal', 'manual'
     this.mode = 'auto';
     this.interfaces = [];
     this.weightedPool = [];
     this.poolIndex = 0;
-    
+
     // Statistics & tracking
     this.stats = {};
     this.speedTracker = {};
@@ -31,7 +31,7 @@ class CombinerEngine {
     this.serverStartTime = Date.now();
     this.logs = [];
     this.logId = 0;
-    
+
     // Timer for speed calculation
     this.speedInterval = null;
     this.isTestingSpeed = false;
@@ -252,131 +252,225 @@ class CombinerEngine {
   }
 
   handleClient(clientSocket) {
-    clientSocket.once('error', () => {});
+    clientSocket.once('error', () => { });
 
-    // SOCKS5 Step 1: Greeting
     clientSocket.once('data', (initData) => {
-      if (!initData || initData.length < 2 || initData[0] !== 0x05) {
+      if (!initData || initData.length === 0) {
         clientSocket.destroy();
         return;
       }
 
-      // SOCKS5 reply: No auth required
-      clientSocket.write(Buffer.from([0x05, 0x00]));
+      // Check if SOCKS5 (0x05)
+      if (initData[0] === 0x05) {
+        this.handleSocks5(clientSocket, initData);
+      } else {
+        // Handle HTTP / HTTPS CONNECT Proxy
+        this.handleHttpProxy(clientSocket, initData);
+      }
+    });
+  }
 
-      // SOCKS5 Step 2: Request
-      clientSocket.once('data', (reqData) => {
-        if (!reqData || reqData.length < 4 || reqData[0] !== 0x05) {
-          clientSocket.destroy();
-          return;
-        }
+  handleHttpProxy(clientSocket, firstChunk) {
+    const headerStr = firstChunk.toString('ascii');
+    const firstLine = headerStr.split('\r\n')[0] || '';
+    const parts = firstLine.split(' ');
+    const method = parts[0];
+    const target = parts[1];
 
-        const cmd = reqData[1];
-        if (cmd !== 0x01) { // CONNECT only
-          this.sendReply(clientSocket, 0x07); // Command not supported
-          return;
-        }
+    if (!method || !target) {
+      clientSocket.destroy();
+      return;
+    }
 
-        const atyp = reqData[3];
-        let targetHost;
-        let targetPort;
+    let targetHost = '';
+    let targetPort = 80;
 
-        try {
-          if (atyp === 0x01) {
-            // IPv4
-            if (reqData.length < 10) { this.sendReply(clientSocket, 0x01); return; }
-            targetHost = `${reqData[4]}.${reqData[5]}.${reqData[6]}.${reqData[7]}`;
-            targetPort = reqData.readUInt16BE(8);
-          } else if (atyp === 0x03) {
-            // Domain
-            const len = reqData[4];
-            if (reqData.length < 5 + len + 2) { this.sendReply(clientSocket, 0x01); return; }
-            targetHost = reqData.slice(5, 5 + len).toString('ascii');
-            targetPort = reqData.readUInt16BE(5 + len);
-          } else if (atyp === 0x04) {
-            // IPv6
-            if (reqData.length < 22) { this.sendReply(clientSocket, 0x08); return; }
-            const parts = [];
-            for (let i = 0; i < 16; i += 2) parts.push(reqData.readUInt16BE(4 + i).toString(16));
-            targetHost = parts.join(':');
-            targetPort = reqData.readUInt16BE(20);
-          } else {
-            this.sendReply(clientSocket, 0x08);
-            return;
-          }
-        } catch (e) {
-          this.sendReply(clientSocket, 0x01);
-          return;
-        }
+    if (method === 'CONNECT') {
+      const hostParts = target.split(':');
+      targetHost = hostParts[0];
+      targetPort = parseInt(hostParts[1], 10) || 443;
+    } else {
+      try {
+        const u = new URL(target);
+        targetHost = u.hostname;
+        targetPort = parseInt(u.port, 10) || (u.protocol === 'https:' ? 443 : 80);
+      } catch (e) {
+        clientSocket.destroy();
+        return;
+      }
+    }
 
-        const iface = this.getNextInterface();
-        if (!iface) {
-          this.sendReply(clientSocket, 0x03); // Network unreachable
-          return;
-        }
+    const iface = this.getNextInterface();
+    if (!iface) {
+      clientSocket.destroy();
+      return;
+    }
 
-        const connectOutbound = (destHost) => {
-          const targetSocket = net.createConnection({
-            host: destHost,
-            port: targetPort,
-            localAddress: iface.address
-          });
+    const targetSocket = net.createConnection({
+      host: targetHost,
+      port: targetPort,
+      localAddress: iface.address
+    });
 
-          targetSocket.once('error', (err) => {
-            this.addLog(iface.name, targetHost, targetPort, false, err.code || err.message);
-            this.sendReply(clientSocket, 0x05); // Connection refused
-          });
+    targetSocket.once('error', (err) => {
+      this.addLog(iface.name, targetHost, targetPort, false, err.code || err.message);
+      clientSocket.destroy();
+    });
 
-          targetSocket.once('connect', () => {
-            this.totalConnections++;
-            this.activeConnections++;
-            const s = this.stats[iface.name];
-            if (s) {
-              s.conns++;
-              s.activeConns++;
-            }
-            this.addLog(iface.name, targetHost, targetPort, true);
-            this.sendReply(clientSocket, 0x00); // Success
+    targetSocket.once('connect', () => {
+      this.totalConnections++;
+      this.activeConnections++;
+      const s = this.stats[iface.name];
+      if (s) {
+        s.conns++;
+        s.activeConns++;
+      }
+      this.addLog(iface.name, targetHost, targetPort, true);
 
-            // Track traffic
-            clientSocket.on('data', (chunk) => {
-              if (s) s.bytesUp += chunk.length;
-            });
-            targetSocket.on('data', (chunk) => {
-              if (s) s.bytesDown += chunk.length;
-            });
+      if (method === 'CONNECT') {
+        clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+      } else {
+        targetSocket.write(firstChunk);
+      }
 
-            clientSocket.pipe(targetSocket);
-            targetSocket.pipe(clientSocket);
+      clientSocket.on('data', (chunk) => { if (s) s.bytesUp += chunk.length; });
+      targetSocket.on('data', (chunk) => { if (s) s.bytesDown += chunk.length; });
 
-            const cleanup = () => {
-              if (targetSocket.__cleaned) return;
-              targetSocket.__cleaned = true;
-              this.activeConnections = Math.max(0, this.activeConnections - 1);
-              if (s) s.activeConns = Math.max(0, s.activeConns - 1);
-              clientSocket.destroy();
-              targetSocket.destroy();
-            };
+      clientSocket.pipe(targetSocket);
+      targetSocket.pipe(clientSocket);
 
-            clientSocket.on('close', cleanup);
-            targetSocket.on('close', cleanup);
-            clientSocket.on('error', cleanup);
-            targetSocket.on('error', cleanup);
-          });
-        };
+      const cleanup = () => {
+        if (targetSocket.__cleaned) return;
+        targetSocket.__cleaned = true;
+        this.activeConnections = Math.max(0, this.activeConnections - 1);
+        if (s) s.activeConns = Math.max(0, s.activeConns - 1);
+        clientSocket.destroy();
+        targetSocket.destroy();
+      };
 
-        if (atyp === 0x03) {
-          dns.resolve4(targetHost, (err, addrs) => {
-            if (err || !addrs || addrs.length === 0) {
-              connectOutbound(targetHost);
-            } else {
-              connectOutbound(addrs[0]);
-            }
-          });
+      clientSocket.on('close', cleanup);
+      targetSocket.on('close', cleanup);
+      clientSocket.on('error', cleanup);
+      targetSocket.on('error', cleanup);
+    });
+  }
+
+  handleSocks5(clientSocket, initData) {
+    // SOCKS5 reply: No auth required
+    clientSocket.write(Buffer.from([0x05, 0x00]));
+
+    // SOCKS5 Step 2: Request
+    clientSocket.once('data', (reqData) => {
+      if (!reqData || reqData.length < 4 || reqData[0] !== 0x05) {
+        clientSocket.destroy();
+        return;
+      }
+
+      const cmd = reqData[1];
+      if (cmd !== 0x01) { // CONNECT only
+        this.sendReply(clientSocket, 0x07); // Command not supported
+        return;
+      }
+
+      const atyp = reqData[3];
+      let targetHost;
+      let targetPort;
+
+      try {
+        if (atyp === 0x01) {
+          // IPv4
+          if (reqData.length < 10) { this.sendReply(clientSocket, 0x01); return; }
+          targetHost = `${reqData[4]}.${reqData[5]}.${reqData[6]}.${reqData[7]}`;
+          targetPort = reqData.readUInt16BE(8);
+        } else if (atyp === 0x03) {
+          // Domain
+          const len = reqData[4];
+          if (reqData.length < 5 + len + 2) { this.sendReply(clientSocket, 0x01); return; }
+          targetHost = reqData.slice(5, 5 + len).toString('ascii');
+          targetPort = reqData.readUInt16BE(5 + len);
+        } else if (atyp === 0x04) {
+          // IPv6
+          if (reqData.length < 22) { this.sendReply(clientSocket, 0x08); return; }
+          const parts = [];
+          for (let i = 0; i < 16; i += 2) parts.push(reqData.readUInt16BE(4 + i).toString(16));
+          targetHost = parts.join(':');
+          targetPort = reqData.readUInt16BE(20);
         } else {
-          connectOutbound(targetHost);
+          this.sendReply(clientSocket, 0x08);
+          return;
         }
-      });
+      } catch (e) {
+        this.sendReply(clientSocket, 0x01);
+        return;
+      }
+
+      const iface = this.getNextInterface();
+      if (!iface) {
+        this.sendReply(clientSocket, 0x03); // Network unreachable
+        return;
+      }
+
+      const connectOutbound = (destHost) => {
+        const targetSocket = net.createConnection({
+          host: destHost,
+          port: targetPort,
+          localAddress: iface.address
+        });
+
+        targetSocket.once('error', (err) => {
+          this.addLog(iface.name, targetHost, targetPort, false, err.code || err.message);
+          this.sendReply(clientSocket, 0x05); // Connection refused
+        });
+
+        targetSocket.once('connect', () => {
+          this.totalConnections++;
+          this.activeConnections++;
+          const s = this.stats[iface.name];
+          if (s) {
+            s.conns++;
+            s.activeConns++;
+          }
+          this.addLog(iface.name, targetHost, targetPort, true);
+          this.sendReply(clientSocket, 0x00); // Success
+
+          // Track traffic
+          clientSocket.on('data', (chunk) => {
+            if (s) s.bytesUp += chunk.length;
+          });
+          targetSocket.on('data', (chunk) => {
+            if (s) s.bytesDown += chunk.length;
+          });
+
+          clientSocket.pipe(targetSocket);
+          targetSocket.pipe(clientSocket);
+
+          const cleanup = () => {
+            if (targetSocket.__cleaned) return;
+            targetSocket.__cleaned = true;
+            this.activeConnections = Math.max(0, this.activeConnections - 1);
+            if (s) s.activeConns = Math.max(0, s.activeConns - 1);
+            clientSocket.destroy();
+            targetSocket.destroy();
+          };
+
+          clientSocket.on('close', cleanup);
+          targetSocket.on('close', cleanup);
+          clientSocket.on('error', cleanup);
+          targetSocket.on('error', cleanup);
+        });
+      };
+
+      if (atyp === 0x03) {
+        dns.resolve4(targetHost, (err, addrs) => {
+          if (err || !addrs || addrs.length === 0) {
+            connectOutbound(targetHost);
+          } else {
+            connectOutbound(addrs[0]);
+          }
+        });
+      } else {
+        connectOutbound(targetHost);
+      }
     });
   }
 

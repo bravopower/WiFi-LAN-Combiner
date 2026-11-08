@@ -9,6 +9,7 @@ class TunManager {
     this.configPath = path.join(this.binDir, 'tun_config.json');
     this.process = null;
     this.isRunning = false;
+    this.mode = 'sysproxy'; // 'sysproxy' (recommended, no VPN conflict) or 'tun'
     this.lastError = null;
     this.logs = [];
   }
@@ -22,125 +23,31 @@ class TunManager {
     }
   }
 
-  generateConfig(socksPort = 1080) {
-    const config = {
-      log: {
-        level: 'warn'
-      },
-      dns: {
-        servers: [
-          {
-            tag: 'dns-remote',
-            type: 'tcp',
-            server: '1.1.1.1',
-            detour: 'socks-out'
-          }
-        ]
-      },
-      inbounds: [
-        {
-          type: 'tun',
-          tag: 'tun-in',
-          address: ['172.19.0.1/30'],
-          auto_route: true,
-          strict_route: false,
-          stack: 'system'
-        }
-      ],
-      outbounds: [
-        {
-          type: 'socks',
-          tag: 'socks-out',
-          server: '127.0.0.1',
-          server_port: socksPort
-        },
-        {
-          type: 'direct',
-          tag: 'direct-out'
-        }
-      ],
-      route: {
-        auto_detect_interface: true,
-        rules: [
-          {
-            protocol: 'dns',
-            action: 'hijack-dns'
-          },
-          {
-            ip_is_private: true,
-            outbound: 'direct-out'
-          }
-        ],
-        final: 'socks-out'
+  setSystemProxy(enable, port = 1080) {
+    try {
+      if (enable) {
+        execSync(`reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings" /v ProxyServer /t REG_SZ /d "127.0.0.1:${port}" /f`, { stdio: 'ignore' });
+        execSync(`reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings" /v ProxyEnable /t REG_DWORD /d 1 /f`, { stdio: 'ignore' });
+      } else {
+        execSync(`reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings" /v ProxyEnable /t REG_DWORD /d 0 /f`, { stdio: 'ignore' });
       }
-    };
-
-    fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2), 'utf8');
-    return this.configPath;
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   start(socksPort = 1080) {
     if (this.isRunning) {
-      return { ok: true, message: 'TUN is already running' };
-    }
-
-    if (!fs.existsSync(this.singBoxPath)) {
-      return { ok: false, error: 'BINARY_MISSING', message: 'فایل sing-box.exe در پوشه bin یافت نشد.' };
-    }
-
-    if (!this.isAdmin()) {
-      return {
-        ok: false,
-        error: 'ADMIN_REQUIRED',
-        message: 'برای فعال‌سازی حالت تونل کل سیستم (TUN Mode)، اجرای برنامه با دسترسی Administrator الزامی است.'
-      };
+      return { ok: true, message: 'System Mode is already running' };
     }
 
     try {
-      this.generateConfig(socksPort);
-
-      this.process = spawn(this.singBoxPath, ['run', '-c', this.configPath], {
-        cwd: this.binDir,
-        windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
-
+      // Primary: Enable Windows System Proxy (Rock solid, zero driver conflict with VPNs)
+      this.setSystemProxy(true, socksPort);
       this.isRunning = true;
       this.lastError = null;
-
-      const appendLog = (data) => {
-        const lines = data.toString().split(/\r?\n/).filter(Boolean);
-        for (const line of lines) {
-          const entry = {
-            time: new Date().toLocaleTimeString('en-US', { hour12: false }),
-            text: line
-          };
-          this.logs.push(entry);
-          if (this.logs.length > 200) this.logs.shift();
-        }
-      };
-
-      this.process.stdout.on('data', appendLog);
-      this.process.stderr.on('data', (data) => {
-        appendLog(data);
-        const str = data.toString();
-        if (str.includes('FATAL') || str.includes('panic:')) {
-          this.lastError = str.trim();
-        }
-      });
-
-      this.process.on('error', (err) => {
-        this.isRunning = false;
-        this.lastError = err.message;
-        this.process = null;
-      });
-
-      this.process.on('close', (code) => {
-        this.isRunning = false;
-        this.process = null;
-      });
-
-      return { ok: true, message: 'حالت تونل کل سیستم با موفقیت فعال شد.' };
+      return { ok: true, message: 'حالت هدایت کل ترافیک سیستم (System Proxy) با موفقیت فعال شد.' };
     } catch (e) {
       this.isRunning = false;
       this.lastError = e.message;
@@ -149,25 +56,25 @@ class TunManager {
   }
 
   stop() {
-    if (!this.isRunning || !this.process) {
-      this.isRunning = false;
-      this.process = null;
-      return { ok: true, message: 'TUN was not running' };
-    }
-
     try {
-      const pid = this.process.pid;
-      try {
-        execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'ignore' });
-      } catch (e) {
-        this.process.kill('SIGINT');
+      // 1. Disable Windows System Proxy
+      this.setSystemProxy(false);
+
+      // 2. Kill sing-box if running in background
+      if (this.process) {
+        try {
+          execSync(`taskkill /pid ${this.process.pid} /T /F`, { stdio: 'ignore' });
+        } catch (e) {}
+        this.process = null;
       }
+      try {
+        execSync('taskkill /f /im sing-box.exe', { stdio: 'ignore' });
+      } catch (e) {}
+
       this.isRunning = false;
-      this.process = null;
-      return { ok: true, message: 'حالت تونل کل سیستم غیرفعال شد.' };
+      return { ok: true, message: 'حالت کل سیستم غیرفعال و شبکه به حالت عادی بازگشت.' };
     } catch (e) {
       this.isRunning = false;
-      this.process = null;
       return { ok: false, error: 'STOP_FAILED', message: e.message };
     }
   }
