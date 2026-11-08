@@ -63,6 +63,10 @@ class TunManager {
         auto_detect_interface: true,
         rules: [
           {
+            process_name: ['node.exe', 'cmd.exe', 'powershell.exe'],
+            outbound: 'direct-out'
+          },
+          {
             protocol: 'dns',
             action: 'hijack-dns'
           },

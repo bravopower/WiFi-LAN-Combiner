@@ -37,6 +37,9 @@ echo   Running as Administrator - TUN Mode Available!
 echo ========================================================
 echo.
 
+:: Optimize network interfaces for multi-homing / bonding (WeakHost)
+powershell -NoProfile -Command "Get-NetIPInterface -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -match 'Ethernet$|Wi-Fi' -and $_.ConnectionState -eq 'Connected' } | ForEach-Object { Set-NetIPInterface -InterfaceIndex $_.InterfaceIndex -WeakHostSend Enabled -WeakHostReceive Enabled -ErrorAction SilentlyContinue }" >nul 2>&1
+
 :: Kill any existing processes to avoid port conflicts
 taskkill /f /im sing-box.exe >nul 2>&1
 

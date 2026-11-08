@@ -43,7 +43,7 @@ class CombinerEngine {
       const startTime = Date.now();
       const req = https.get('https://1.1.1.1/cdn-cgi/trace', {
         localAddress,
-        timeout: 2500
+        timeout: 4500
       }, (res) => {
         res.resume();
         res.on('end', () => resolve(Date.now() - startTime));
@@ -215,13 +215,21 @@ class CombinerEngine {
     const checkAll = async () => {
       for (const iface of this.interfaces) {
         const ping = await this.pingInterface(iface.address);
-        iface.pingMs = ping;
-        iface.active = ping !== -1;
+        if (ping !== -1) {
+          iface.pingMs = ping;
+          iface.active = true;
+          iface.failCount = 0;
+        } else {
+          iface.failCount = (iface.failCount || 0) + 1;
+          if (iface.failCount >= 3) {
+            iface.active = false;
+          }
+        }
       }
       this.rebuildPool();
     };
     checkAll();
-    this.healthInterval = setInterval(checkAll, 8000);
+    this.healthInterval = setInterval(checkAll, 10000);
   }
 
   start() {
